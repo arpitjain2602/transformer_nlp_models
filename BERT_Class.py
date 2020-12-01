@@ -11,6 +11,7 @@ import numpy as np
 import time
 import datetime
 import random
+import torch
 import os
 
 def flat_accuracy(preds, labels):  # Function to calculate the accuracy of our predictions vs labels
