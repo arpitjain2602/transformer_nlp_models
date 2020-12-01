@@ -105,7 +105,7 @@ class RoBERTa():
       loss_values = []
       logits_list, label_ids_list = [], []
 
-      model = train_val_loop(model, epochs, train_dataloader, optimizer, scheduler, validation_dataloader, model_save_path, custom_name = '_')
+      model = train_val_loop(model, epochs, train_dataloader, optimizer, scheduler, validation_dataloader, model_save_path, self.evaluate_score, custom_name = '_')
 
       return model, tokenizer, device, max_length
 
