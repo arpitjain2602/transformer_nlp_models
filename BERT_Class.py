@@ -49,7 +49,7 @@ class Bert():
       self.NUM_CLASS = NUM_CLASS
 
       print('Loading BERT tokenizer...') # Load the BERT tokenizer.
-      tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=do_lower_case)
+      tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 
       print('Set max_length as: ', min(512, np.max(np.array([len(tokenizer.encode(i, add_special_tokens=True)) for i in sentences]))) )
 
