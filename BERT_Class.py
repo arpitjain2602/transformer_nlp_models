@@ -14,6 +14,14 @@ import random
 import torch
 import os
 
+if torch.cuda.is_available():    # If there's a GPU available...
+    device = torch.device("cuda") # Tell PyTorch to use the GPU.
+    print('There are %d GPU(s) available.' % torch.cuda.device_count())
+    print('We will use the GPU:', torch.cuda.get_device_name(0))
+else: # If not...
+    print('No GPU available, using the CPU instead.')
+    device = torch.device("cpu")
+
 def flat_accuracy(preds, labels):  # Function to calculate the accuracy of our predictions vs labels
     pred_flat = np.argmax(preds, axis=1).flatten()
     labels_flat = labels.flatten()
