@@ -13,6 +13,11 @@ import datetime
 import random
 import torch
 import os
+import pandas as pd
+
+import warnings
+warnings.filterwarnings("ignore")
+
 
 if torch.cuda.is_available():    # If there's a GPU available...
     device = torch.device("cuda") # Tell PyTorch to use the GPU.
@@ -33,23 +38,20 @@ def f1_score_2(preds, labels):  # Function to calculate the accuracy of our pred
     # return f1_score(labels_flat, pred_flat)
     return f1_score(labels_flat, pred_flat, average='weighted')
 
-# Example Call
-
-# bert_instance = Bert(NUM_CLASS=2, evaluate_score=f1_score_2)
-# model, tokenizer, device, max_length = bert_instance.fit(sentences=sentences, labels=labels, 
-# 	model_save_path='folder/arpit', device=device, 
-# 	max_length=512, test_size=0.1, batch_size=8, epochs=2,
-# 	output_attentions=True, output_hidden_states=True, )
-
 
 class Bert():
 
-    def __init__(self, NUM_CLASS, seed_val=42, random_state=2018, evaluate_score=flat_accuracy):
+    def __init__(self, sentences, NUM_CLASS, seed_val=42, random_state=2018, evaluate_score=flat_accuracy):
 
       self.seed_val = seed_val
       self.random_state = random_state
       self.evaluate_score = evaluate_score
       self.NUM_CLASS = NUM_CLASS
+
+      print('Loading BERT tokenizer...') # Load the BERT tokenizer.
+      tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=do_lower_case)
+
+      print('Set max_length as: ', min(512, np.max(np.array([len(tokenizer.encode(i, add_special_tokens=True)) for i in sentences]))) )
 
 
     def format_time(self, elapsed):
