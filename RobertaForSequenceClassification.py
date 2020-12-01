@@ -15,9 +15,9 @@ import torch
 import os
 import pandas as pd
 
+from utils import *
 import warnings
 warnings.filterwarnings("ignore")
-
 
 if torch.cuda.is_available():    # If there's a GPU available...
     device = torch.device("cuda") # Tell PyTorch to use the GPU.
@@ -27,189 +27,20 @@ else: # If not...
     print('No GPU available, using the CPU instead.')
     device = torch.device("cpu")
 
-def flat_accuracy(preds, labels):  # Function to calculate the accuracy of our predictions vs labels
-    pred_flat = np.argmax(preds, axis=1).flatten()
-    labels_flat = labels.flatten()
-    return np.sum(pred_flat == labels_flat) / len(labels_flat)
-
-def f1_score_2(preds, labels):  # Function to calculate the accuracy of our predictions vs labels
-    pred_flat = np.argmax(preds, axis=1).flatten()
-    labels_flat = labels.flatten()
-    # return f1_score(labels_flat, pred_flat)
-    return f1_score(labels_flat, pred_flat, average='weighted')
-
-
 class RoBERTa():
 
-    def __init__(self, sentences, NUM_CLASS, seed_val=42, random_state=2018, evaluate_score=flat_accuracy):
+    def __init__(self, sentences, NUM_CLASS, seed_val=42, random_state=2018, evaluate_score=flat_accuracy, domain='roberta-base'):
 
       self.seed_val = seed_val
       self.random_state = random_state
       self.evaluate_score = evaluate_score
       self.NUM_CLASS = NUM_CLASS
+      self.domain = domain
 
       print('Loading RoBERT tokenizer...') # Load the BERT tokenizer.
-      tokenizer = RobertaTokenizer.from_pretrained('roberta-base', do_lower_case=True)
+      tokenizer = RobertaTokenizer.from_pretrained(self.domain, do_lower_case=True)
 
       print('Set max_length as: ', min(512, np.max(np.array([len(tokenizer.encode(i, add_special_tokens=True)) for i in sentences]))) )
-
-
-    def format_time(self, elapsed):
-        '''
-        Takes a time in seconds and returns a string hh:mm:ss
-        '''
-        elapsed_rounded = int(round((elapsed)))  # Round to the nearest second.
-        # Format as hh:mm:ss
-        return str(datetime.timedelta(seconds=elapsed_rounded))
-
-    def get_inputid_attentionmasks(self, tokenizer, sentences, max_length, debug=False, add_special_tokens=True):
-	    '''
-	    add_special_tokens = Add '[CLS]' and '[SEP]'
-	    max_length = maximum length of sentence
-	    '''
-	    # Tokenize all of the sentences and map the tokens to thier word IDs.
-	    input_ids = []
-	    for sent in sentences:
-	        encoded_sent = tokenizer.encode(sent, max_length=max_length, add_special_tokens=add_special_tokens)
-	        input_ids.append(encoded_sent)
-	        # `encode` will: Tokenize the sentence --> Prepend the `[CLS]` token to the start 
-	        # --> Append the `[SEP]` token to the end --> Map tokens to their IDs.
-	        # Truncate all sentences.
-	        # This function also supports truncation and conversion to pytorch tensors, but we need to do padding, so we can't use these features :(
-	        # return_tensors = 'pt', # Return pytorch tensors.
-	                  
-	    if (debug):
-	        print('Original: ', sentences[0])
-	        print('Token IDs:', input_ids[0])
-	        print('Max sentence length: ', max([len(sen) for sen in input_ids]))
-	        print('\nPadding/truncating all sentences to %d values...' % max_length)
-	        print('\nPadding token: "{:}", ID: {:}'.format(tokenizer.pad_token, tokenizer.pad_token_id))
-
-	    input_ids = pad_sequences(input_ids, maxlen=max_length, dtype="long", 
-	                              value=0, truncating="post", padding="post")  # "post" indicates that we want to pad and truncate at the end of the sequence, as opposed to the beginning.
-	    
-	    attention_masks = [] # Create attention masks
-	    for sent in input_ids: # For each sentence, Create the attention mask.
-	        #  If a token ID is 0, then it's padding, set the mask to 0.
-	        #  If a token ID is > 0, then it's a real token, set the mask to 1.
-	        att_mask = [int(token_id > 0) for token_id in sent]
-	        attention_masks.append(att_mask) # Store the attention mask for this sentence.
-	    return input_ids, attention_masks
-
-
-    def create_data(self, inputs_ids, attention_masks, labels, batch_size):
-	    inputs_ids = torch.tensor(inputs_ids)
-	    attention_masks = torch.tensor(attention_masks)
-	    labels = torch.tensor(labels)
-	    
-	    data = TensorDataset(inputs_ids, attention_masks, labels)
-	    sampler = RandomSampler(data)
-	    dataloader = DataLoader(data, sampler=sampler, batch_size=batch_size)
-	    return data, sampler, dataloader
-
-    def train_val_loop(self, model, epochs, train_dataloader, optimizer, scheduler, validation_dataloader, model_save_path, custom_name = '_'):
-
-      # For each epoch...
-      train_loss=[]
-      val_loss=[]
-      train_score=[]
-      val_score=[]
-
-      for epoch_i in range(0, epochs):
-          #               Training
-          # Perform one full pass over the training set.
-          print("")
-          print('======== Epoch {:} / {:} ========'.format(epoch_i + 1, epochs))
-          print('Training...')
-          t0 = time.time() # Measure how long the training epoch takes.
-          total_loss, total_score = 0, 0 # Reset the total loss for this epoch.
-
-          model.train()
-
-          for step, batch in enumerate(train_dataloader): # For each batch of training data...
-              if step % 200 == 0 and not step == 0:  # Progress update every 40 batches.
-                  elapsed = self.format_time(time.time() - t0) # Calculate elapsed time in minutes.
-                  
-                  # Report progress.
-                  print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(step, len(train_dataloader), elapsed))
-              
-              b_input_ids = batch[0].to(device)
-              b_input_mask = batch[1].to(device)
-              b_labels = batch[2].to(device)
-              model.zero_grad()
-              
-              outputs = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask, labels=b_labels)
-              loss = outputs[0]
-              total_loss += loss.item()
-              # print(outputs[1])
-
-              total_score += self.evaluate_score(outputs[1].detach().cpu().numpy(), b_labels.to('cpu').numpy())
-
-              loss.backward() # Perform a backward pass to calculate the gradients.
-              torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # Clip the norm of the gradients to 1.0. This is to help prevent the "exploding gradients" problem.
-
-              optimizer.step()
-              scheduler.step() # Update the learning rate.
-          
-          train_loss.append(total_loss / len(train_dataloader)) # Store the loss value for plotting the learning curve.
-
-          print("")
-          print("  Train loss: {0:.2f}".format(total_loss / len(train_dataloader)))
-          print("  Train score: {0:.2f}".format(total_score / len(train_dataloader)))
-          print("  Training epcoh took: {:}".format(self.format_time(time.time() - t0)))
-              
-          #               Validation
-
-          print("")
-          print("Running Validation...")
-
-          t0 = time.time()
-          model.eval()
-
-          eval_loss, eval_accuracy = 0, 0
-          nb_eval_steps, nb_eval_examples = 0, 0
-
-          for batch in validation_dataloader:
-              batch = tuple(t.to(device) for t in batch) # Add batch to GPU
-              b_input_ids, b_input_mask, b_labels = batch # Unpack the inputs from our dataloader
-
-              with torch.no_grad():
-
-                  outputs = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask, labels=b_labels)
-
-              # print(len(outputs))
-              # print(outputs[0])
-              # print(outputs[1])
-              logits = outputs[1] # Get the "logits" output by the model. The "logits" are the output values prior to applying an activation function like the softmax.
-              eval_loss += outputs[0].item()
-              logits = logits.detach().cpu().numpy() # Move logits and labels to CPU
-              label_ids = b_labels.to('cpu').numpy()
-              # print(logits)
-              # print(label_ids)
-
-              # tmp_eval_accuracy = flat_accuracy(logits, label_ids) # Calculate the accuracy for this batch of test sentences.
-              # tmp_eval_accuracy = f1_score_2(logits, label_ids)
-              tmp_eval_accuracy = self.evaluate_score(logits, label_ids)
-              eval_accuracy += tmp_eval_accuracy
-              nb_eval_steps += 1 
-
-          
-          print("  Val Loss: {0:.2f}".format(eval_loss/nb_eval_steps))
-          print("  Val Score: {0:.2f}".format(eval_accuracy/nb_eval_steps))
-          print("  Validation took: {:}".format(self.format_time(time.time() - t0)))
-
-          filename = custom_name + 'RoBERTa_epoch={0}_trloss={1:.2f}_trscore={2:.2f}_valloss={3:.2f}_valscore={4:.2f}_.pkl'.format(str(epoch_i), total_loss/len(train_dataloader),total_score/len(train_dataloader), eval_loss/nb_eval_steps, eval_accuracy/nb_eval_steps)
-          model_path = os.path.join(model_save_path, filename)
-          torch.save(model, model_path)
-          print("")
-          print("Model Saved for epoch {}!".format(epoch_i+1))
-
-      print("")
-      print("Training complete!")
-
-
-      return model
-
 
     def fit(self, sentences, labels, model_save_path, device, do_lower_case=True, debug=False, max_length=512, add_special_tokens=True, test_size=0.1, batch_size=8, output_attentions=True, output_hidden_states=True, epochs=2):
       '''
@@ -221,7 +52,7 @@ class RoBERTa():
       '''
 
       print('Loading RoBERTa tokenizer...') # Load the BERT tokenizer.
-      tokenizer = RobertaTokenizer.from_pretrained('roberta-base', do_lower_case=do_lower_case)
+      tokenizer = RobertaTokenizer.from_pretrained(self.domain, do_lower_case=do_lower_case)
 
       if debug:
         # Print the original sentence.
@@ -234,19 +65,19 @@ class RoBERTa():
         print('Token IDs: ', tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sentences[0])))
 
       
-      input_ids, attention_masks = self.get_inputid_attentionmasks(tokenizer, sentences, debug=False, max_length=max_length, add_special_tokens=True)
+      input_ids, attention_masks = get_inputid_attentionmasks(tokenizer, sentences, debug=False, max_length=max_length, add_special_tokens=True)
 
       # Use 90% for training and 10% for validation.
       train_inputs, validation_inputs, train_labels, validation_labels = train_test_split(input_ids, labels, random_state=self.random_state, test_size=test_size)
       # Do the same for the masks
       train_masks, validation_masks, _, _ = train_test_split(attention_masks, labels,random_state=self.random_state, test_size=test_size)
 
-      train_data, train_sampler, train_dataloader = self.create_data(train_inputs, train_masks, train_labels, batch_size)
-      validation_data, validation_sampler, validation_dataloader = self.create_data(validation_inputs, validation_masks, validation_labels,batch_size)
+      train_data, train_sampler, train_dataloader = create_data(train_inputs, train_masks, train_labels, batch_size)
+      validation_data, validation_sampler, validation_dataloader = create_data(validation_inputs, validation_masks, validation_labels,batch_size)
 
 
       # Load RobertaForSequenceClassification, the pretrained BERT model with a single linear classification layer on top. 
-      model = RobertaForSequenceClassification.from_pretrained("roberta-base", 
+      model = RobertaForSequenceClassification.from_pretrained(self.domain, 
         num_labels = self.NUM_CLASS, 
         output_attentions=output_attentions, 
         output_hidden_states=output_hidden_states)
@@ -274,18 +105,9 @@ class RoBERTa():
       loss_values = []
       logits_list, label_ids_list = [], []
 
-      model = self.train_val_loop(model, epochs, train_dataloader, optimizer, scheduler, validation_dataloader, model_save_path, custom_name = '_')
+      model = train_val_loop(model, epochs, train_dataloader, optimizer, scheduler, validation_dataloader, model_save_path, custom_name = '_')
 
       return model, tokenizer, device, max_length
-
-
-    def fill_output(self, model, example_test_sentence, tokenizer, device, max_length):
-        prediction, prediction_probability = self.predict(model, example_test_sentence, tokenizer, device, max_length)
-        attention, tokens = self.get_attention_tokens(model, example_test_sentence, tokenizer, device, max_length)
-        _, weights = self.get_average_attention_weights(attention, tokens)  # These are normalized weights, if you want absolute, take the first argument
-        
-        return prediction, prediction_probability, weights.values
-
 
 
       # Function for getting prediction and prediction probability
@@ -313,6 +135,13 @@ class RoBERTa():
 
         return prediction, prediction_probability
 
+    
+    def fill_output(self, model, example_test_sentence, tokenizer, device, max_length):
+        prediction, prediction_probability = self.predict(model, example_test_sentence, tokenizer, device, max_length)
+        attention, tokens = self.get_attention_tokens(model, example_test_sentence, tokenizer, device, max_length)
+        _, weights = self.get_average_attention_weights(attention, tokens)  # These are normalized weights, if you want absolute, take the first argument
+        
+        return prediction, prediction_probability, weights.values
 
 	# -----------------------------------------------------------------
 	# Functions for getting attention tokens
