@@ -2,8 +2,8 @@
 from keras.preprocessing.sequence import pad_sequences
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-from transformers import BertTokenizer
-from transformers import BertForSequenceClassification, AdamW, BertConfig
+from transformers import RobertaTokenizer
+from transformers import RobertaForSequenceClassification, AdamW, RobertaConfig
 from transformers import get_linear_schedule_with_warmup
 
 from sklearn.metrics import f1_score, accuracy_score
@@ -39,7 +39,7 @@ def f1_score_2(preds, labels):  # Function to calculate the accuracy of our pred
     return f1_score(labels_flat, pred_flat, average='weighted')
 
 
-class Bert():
+class RoBERTa():
 
     def __init__(self, sentences, NUM_CLASS, seed_val=42, random_state=2018, evaluate_score=flat_accuracy):
 
@@ -48,8 +48,8 @@ class Bert():
       self.evaluate_score = evaluate_score
       self.NUM_CLASS = NUM_CLASS
 
-      print('Loading BERT tokenizer...') # Load the BERT tokenizer.
-      tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+      print('Loading RoBERT tokenizer...') # Load the BERT tokenizer.
+      tokenizer = RobertaTokenizer.from_pretrained('roberta-base', do_lower_case=True)
 
       print('Set max_length as: ', min(512, np.max(np.array([len(tokenizer.encode(i, add_special_tokens=True)) for i in sentences]))) )
 
@@ -198,7 +198,7 @@ class Bert():
           print("  Val Score: {0:.2f}".format(eval_accuracy/nb_eval_steps))
           print("  Validation took: {:}".format(self.format_time(time.time() - t0)))
 
-          filename = custom_name + 'BERT_epoch={0}_trloss={1:.2f}_trscore={2:.2f}_valloss={3:.2f}_valscore={4:.2f}_.pkl'.format(str(epoch_i), total_loss/len(train_dataloader),total_score/len(train_dataloader), eval_loss/nb_eval_steps, eval_accuracy/nb_eval_steps)
+          filename = custom_name + 'RoBERTa_epoch={0}_trloss={1:.2f}_trscore={2:.2f}_valloss={3:.2f}_valscore={4:.2f}_.pkl'.format(str(epoch_i), total_loss/len(train_dataloader),total_score/len(train_dataloader), eval_loss/nb_eval_steps, eval_accuracy/nb_eval_steps)
           model_path = os.path.join(model_save_path, filename)
           torch.save(model, model_path)
           print("")
@@ -220,8 +220,8 @@ class Bert():
       - test_size: is validation size (train and validation split basically)
       '''
 
-      print('Loading BERT tokenizer...') # Load the BERT tokenizer.
-      tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=do_lower_case)
+      print('Loading RoBERTa tokenizer...') # Load the BERT tokenizer.
+      tokenizer = RobertaTokenizer.from_pretrained('roberta-base', do_lower_case=do_lower_case)
 
       if debug:
         # Print the original sentence.
@@ -245,8 +245,8 @@ class Bert():
       validation_data, validation_sampler, validation_dataloader = self.create_data(validation_inputs, validation_masks, validation_labels,batch_size)
 
 
-      # Load BertForSequenceClassification, the pretrained BERT model with a single linear classification layer on top. 
-      model = BertForSequenceClassification.from_pretrained("bert-base-uncased", 
+      # Load RobertaForSequenceClassification, the pretrained BERT model with a single linear classification layer on top. 
+      model = RobertaForSequenceClassification.from_pretrained("roberta-base", 
         num_labels = self.NUM_CLASS, 
         output_attentions=output_attentions, 
         output_hidden_states=output_hidden_states)
@@ -448,3 +448,7 @@ class Bert():
         attention_weights_normalized_df = attention_weights_normalized_df[['tokens', 'attention_normalized_AVERAGE']]
         
         return attention_weights_df, attention_weights_normalized_df
+
+
+
+
